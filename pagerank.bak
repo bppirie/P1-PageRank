@@ -75,7 +75,17 @@
 ;;
 ;; (-> graph? nonnegative-integer?)
 (define (num-pages graph)
-  'todo)
+  (define (h graph acc)
+    (match graph
+      ['() (set-count acc)]
+      [`((,fst ,snd) . ,tl) (if (set-member? acc fst)
+                              (if (set-member? acc snd)
+                                  (h tl acc)
+                                  (h tl (set-add acc snd)))
+                              (if (set-member? acc snd)
+                                  (h tl (set-add acc fst))
+                                  (h tl (set-add (set-add acc fst) snd))))]))
+  (h graph (set)))
 
 ;; Takes some input graph and computes the number of links emanating
 ;; from page. For example, (num-links '((n0 n1) (n1 n0) (n0 n2)) 'n0)
@@ -83,7 +93,15 @@
 ;;
 ;; (-> graph? symbol? nonnegative-integer?)
 (define (num-links graph page)
-  'todo)
+  (define (h graph page acc)
+    (match graph
+      ['() (set-count acc)]
+      [`((,fst ,snd) . ,tl) (if (equal? fst page)
+                              (if (set-member? acc snd)
+                                  (h tl page acc)
+                                  (h tl page (set-add acc snd)))
+                              (h tl page acc))]))
+  (h graph page (set)))
 
 ;; Calculates a set of pages that link to page within graph. For
 ;; example, (get-backlinks '((n0 n1) (n1 n2) (n0 n2)) n2) should
@@ -91,7 +109,15 @@
 ;;
 ;; (-> graph? symbol? (set/c symbol?))
 (define (get-backlinks graph page)
-  'todo)
+  (define (h graph page acc)
+    (match graph
+      ['() acc]
+      [`((,fst ,snd) . ,tl) (if (equal? snd page)
+                              (if (set-member? acc fst)
+                                  (h tl page acc)
+                                  (h tl page (set-add acc fst)))
+                              (h tl page acc))]))
+  (h graph page (set)))
 
 ;; Generate an initial pagerank for the input graph g. The returned
 ;; PageRank must satisfy pagerank?, and each value of the hash must be
@@ -99,7 +125,15 @@
 ;; graph.
 ;; (-> graph? pagerank?)
 (define (mk-initial-pagerank graph)
-  'todo)
+  (define N (num-pages graph))
+  (define (h graph acc hash)
+    (match graph
+      ['() hash]
+      [`((,fst ,snd) . ,tl) (cond [(and (set-member? acc fst) (set-member? acc snd)) (h tl acc hash)]
+                                  [(set-member? acc fst) (h tl (set-add acc snd) (hash-set hash snd (/ 1 N)))]
+                                  [(set-member? acc snd) (h tl (set-add acc fst) (hash-set hash fst (/ 1 N)))]
+                                  [else (h tl (set-add (set-add acc fst) snd) (hash-set (hash-set hash fst (/ 1 N)) snd (/ 1 N)))])]))
+  (h graph (set) (hash)))
 
 ;; Perform one step of PageRank on the specified graph. Return a new
 ;; PageRank with updated values after running the PageRank
@@ -117,7 +151,27 @@
 ;;
 ;; (-> pagerank? rational? graph? pagerank?)
 (define (step-pagerank pr d graph)
-  'todo)
+  (define N (num-pages graph))
+  (define rand (/ (- 1 d) N))
+  (define (new-rank pg)
+    (+ rand (* d (step-page-sum pr graph pg))))
+  (define (h pr d graph acc newpr)
+    (match graph
+      ['() newpr]
+      [`((,fst ,snd) . ,tl) (cond [(and (set-member? acc fst) (set-member? acc snd)) (h pr d tl acc newpr)]
+                                  [(set-member? acc fst) (h pr d tl (set-add acc snd) (hash-set newpr snd (new-rank snd)))]
+                                  [(set-member? acc snd) (h pr d tl (set-add acc fst) (hash-set newpr fst (new-rank fst)))]
+                                  [else (h pr d tl (set-add (set-add acc fst) snd) (hash-set (hash-set newpr fst (new-rank fst)) snd (new-rank snd)))])]))
+  (h pr d graph (set) pr))
+
+(define (step-page-sum pr graph pg)
+  (define backs (set->list (get-backlinks graph pg)))
+  (define (h pr graph pg pjs acc)
+    (if (equal? pjs '())
+        acc
+        (h pr graph pg (cdr pjs) (+ acc (/ (hash-ref pr (car pjs)) (num-links graph (car pjs)))))))
+  (h pr graph pg backs 0))
+
 
 ;; Iterate PageRank until the largest change in any page's rank is
 ;; smaller than a specified delta.
