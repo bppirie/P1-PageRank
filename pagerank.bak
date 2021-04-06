@@ -178,7 +178,21 @@
 ;;
 ;; (-> pagerank? rational? graph? rational? pagerank?)
 (define (iterate-pagerank-until pr d graph delta)
-  'todo)
+  (define newpr (step-pagerank pr d graph))
+  (if (compare-pr pr graph newpr delta)
+      newpr
+      (iterate-pagerank-until newpr d graph delta)))
+
+(define (compare-pr pr graph newpr delta)
+  (define (h graph acc)
+    (match graph
+      ['() #t]
+      [`((,fst ,snd) . ,tl) (cond [(and (set-member? acc fst) (set-member? acc snd)) (h tl acc)]
+                                  [(set-member? acc fst) (and (> delta (abs (- (hash-ref pr snd) (hash-ref newpr snd)))) (h tl (set-add acc snd)))]
+                                  [(set-member? acc snd) (and (> delta (abs (- (hash-ref pr fst) (hash-ref newpr fst)))) (h tl (set-add acc fst)))]
+                                  [else (and (> delta (abs (- (hash-ref pr fst) (hash-ref newpr fst)))) (> delta (abs (- (hash-ref pr snd) (hash-ref newpr snd)))) (h tl (set-add (set-add acc fst) snd)))])]))
+  (h graph (set)))
+  
 
 ;; Given a PageRank, returns the list of pages it contains in ranked
 ;; order (from least-popular to most-popular) as a list. You may
@@ -187,4 +201,14 @@
 ;;
 ;; (-> pagerank? (listof symbol?))
 (define (rank-pages pr)
-  'todo)
+  (define (h pr acc)
+    (if (hash-empty? pr)
+        acc
+        (h (hash-remove pr (best-pg pr)) (cons (best-pg pr) acc))))
+  (h pr '()))
+
+(define (best-pg pr)
+  (define pr-list (hash->list pr))
+  (car (foldl (lambda (nextelm acc) (if (> (cdr nextelm) (cdr acc))
+                                                nextelm
+                                                acc)) (car pr-list) pr-list)))
